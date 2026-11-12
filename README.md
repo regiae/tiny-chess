@@ -1,35 +1,50 @@
-# Tiny Chess Engine
+# Tiny Chess v2
 
-A tiny but strong chess engine packed into one 4,085-byte Python file.
+A complete chess engine squeezed into less than 4 KB of Python (standard
+library only). It plays a full game: legal move generation, search, and
+evaluation, with no external dependencies and no model calls.
 
-## How it searches
+## Layout
 
-The board is a 0x88 array with Zobrist hashing and a transposition
-table. Search is negamax with alpha-beta pruning and iterative
-deepening to a fixed budget of 120,000 nodes per move, roughly two to
-three seconds. Quiescence search covers captures and promotions, and
-every evasion while the king is in check.
+- `main.py` is the whole program, 4,073 bytes. It is a small loader: the
+  engine source is LZMA-compressed and base85-encoded into two string
+  pieces, which are joined, decoded, decompressed, and executed at
+  startup. Keeping the payload in two pieces keeps the file inside the
+  4,096-byte limit while leaving the loader readable.
 
-Move ordering tries the transposition-table move first, then MVV-LVA
-captures, killer moves, and a history heuristic. Null-move pruning
-runs with R=2, mate scores are adjusted inside the transposition
-table, and the root search uses a narrowing alpha-beta window.
+## How the engine thinks
 
-## How it evaluates
+The board uses the 0x88 representation, with Zobrist hashing and a
+transposition table. The search is negamax with alpha-beta pruning and
+iterative deepening, plus quiescence search at the leaves so captures are
+resolved before a position is judged. Moves are ordered so the most
+promising ones are tried first, and late move reductions trim the search
+on quiet moves that come late in the ordering. Lines that give check get
+a small depth extension, and the whole search runs under a fixed node
+budget so it always answers in time.
 
-Material plus CPW piece-square tables, a bishop-pair bonus, and an
-endgame king table. Insufficient-material draws are recognised, and
-every rule is handled: check, checkmate, stalemate, castling, en
-passant, and promotion to any of the four pieces.
+Evaluation is tapered: piece values and the king table are interpolated
+between middlegame and endgame weights based on how much material is
+left on the board, and a bonus is given for holding both bishops. The
+result is a single score from the side to move's point of view.
 
-## Verification
+## Correctness
 
-Perft matches python-chess on all six standard test positions at
-depth 3, including 8,902 nodes from the start position. In a practice
-trial the engine scored Elo 1396, above the sunfish baseline of 1360.
+Move generation was checked with perft on the six standard test
+positions at depth 3, and all six counts match the known values.
 
-## Files
+## Local trial result
 
-- `main.py` — the whole engine, compressed into 4,085 bytes
-- `README.md` — this file
-- `LICENSE` — MIT license
+In local 80-game matches at 8,000 nodes per move against the previous
+version of this engine, this version scored 25 wins, 42 draws, and 13
+losses, about +53 Elo.
+
+## Running it
+
+The engine talks to the competition environment over HTTP:
+
+```
+MAKEFUN_ENV_URL=http://127.0.0.1:18081 python3 main.py
+```
+
+It needs nothing beyond Python 3 and its standard library.
